@@ -1,0 +1,119 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  annotations:
+    openshift.io/generated-by: OpenShiftNewApp
+  name: sonarqube
+  labels:
+    app: sonarqube
+spec:
+  strategy:
+    type: Recreate
+    recreateParams:
+      timeoutSeconds: 600
+    rollingParams:
+      updatePeriodSeconds: 1
+      intervalSeconds: 1
+      timeoutSeconds: 600
+      maxUnavailable: 25%
+      maxSurge: 25%
+    resources: {}
+    activeDeadlineSeconds: 21600
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - sonarqube
+        from:
+          kind: ImageStreamTag
+          name: 'sonarqube:7.9.1'
+        lastTriggeredImage: >-
+          quay.io/gpte-devops-automation/sonarqube@sha256:602eecd6a3ba784563c77e0a31c45ee0c0a2ac3a38b3449114ef113b8137763b
+  replicas: 1
+  revisionHistoryLimit: 10
+  test: false
+  selector:
+    app: sonarqube
+    deploymentconfig: sonarqube
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: sonarqube
+        deploymentconfig: sonarqube
+        tuned.openshift.io/elasticsearch: 'true'
+      annotations:
+        openshift.io/generated-by: OpenShiftNewApp
+    spec:
+      volumes:
+        - name: sonarqube-volume-1
+          persistentVolumeClaim:
+            claimName: sonarqube-pvc
+      initContainers:
+        - resources: {}
+          terminationMessagePath: /dev/termination-log
+          name: sonarqube-init
+          command:
+            - /bin/bash
+            - '-c'
+          securityContext:
+            privileged: true
+          imagePullPolicy: IfNotPresent
+          terminationMessagePolicy: File
+          image: 'centos:7'
+          args:
+            - sysctl -w vm.max_map_count=262144
+      containers:
+        - resources:
+            limits:
+              cpu: '2'
+              memory: 3Gi
+            requests:
+              cpu: '1'
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /about
+              port: 9000
+              scheme: HTTP
+            initialDelaySeconds: 20
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          name: sonarqube
+          livenessProbe:
+            httpGet:
+              path: /about
+              port: 9000
+              scheme: HTTP
+            initialDelaySeconds: 40
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: SONARQUBE_JDBC_PASSWORD
+              value: password
+            - name: SONARQUBE_JDBC_URL
+              value: 'jdbc:postgresql://postgres:5432/postgresdb'
+            - name: SONARQUBE_JDBC_USERNAME
+              value: postgres
+          ports:
+            - containerPort: 9000
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sonarqube-volume-1
+              mountPath: /mnt/data
+          terminationMessagePolicy: File
+          image: >-
+            quay.io/gpte-devops-automation/sonarqube@sha256:602eecd6a3ba784563c77e0a31c45ee0c0a2ac3a38b3449114ef113b8137763b
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
